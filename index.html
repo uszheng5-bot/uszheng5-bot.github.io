@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>智能锁控制器 v2.5.2 (Web BLE)</title>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#00FF88">
+
+<style>
+/* CSS Styles (保留原版样式，为新元素添加适应) */
+:root{
+  --bg1:#06070a; --bg2:#0f1116; --card:#0f1214;
+  --accent:#00ff88; --accent-2:#38d04b; --muted:#9aa0a6;
+  --glass: rgba(255,255,255,0.03);
+  --danger:#ff6b6b; --ease:cubic-bezier(.4,0,.2,1);
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:linear-gradient(160deg,var(--bg1),var(--bg2));font-family:"Segoe UI",Inter,Roboto,Arial;color:#fff;-webkit-font-smoothing:antialiased}
+.app{max-width:980px;margin:18px auto;padding:14px;display:grid;grid-template-columns:360px 1fr;gap:18px}
+@media(max-width:820px){.app{grid-template-columns:1fr;padding:10px}}
+
+.card{background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border-radius:12px;padding:12px;box-shadow:0 14px 40px rgba(0,0,0,0.6)}
+.left{display:flex;flex-direction:column;align-items:center;gap:12px}
+.circle{width:260px;height:260px;border-radius:50%;position:relative;display:flex;align-items:center;justify-content:center;background:conic-gradient(var(--accent-2) 0deg,#2a2a30 0deg);transition:background .45s var(--ease),transform .18s var(--ease);box-shadow:0 20px 40px rgba(0,0,0,0.6);cursor:pointer;overflow:visible}
+.circle::before{content:"";position:absolute;width:200px;height:200px;border-radius:50%;background:radial-gradient(circle at top,#0b0b0b,#101218);box-shadow:inset 0 6px 14px rgba(0,0,0,0.6)}
+.circle-inner{position:absolute;width:170px;text-align:center;z-index:2}
+.circle-title{font-size:20px;font-weight:700}
+.circle-sub{font-size:13px;color:var(--muted);margin-top:6px}
+
+/* highlight animations */
+.circle.flash-success{animation:flashSuccess 1.6s both}
+@keyframes flashSuccess{0%{transform:scale(1)}25%{transform:scale(1.03);box-shadow:0 0 26px rgba(124,243,124,0.35)}60%{transform:scale(1.02);box-shadow:0 0 18px rgba(124,243,124,0.25)}100%{transform:scale(1)}}
+.circle.flash-fail{animation:flashFail 1.6s both}
+@keyframes flashFail{0%{transform:scale(1)}25%{transform:scale(1.03);box-shadow:0 0 26px rgba(255,107,107,0.35)}60%{transform:scale(1.02);box-shadow:0 0 18px rgba(255,107,107,0.25)}100%{transform:scale(1)}}
+
+/* controls */
+.controls{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.btn{border:0;padding:10px 14px;border-radius:10px;background:linear-gradient(180deg,var(--accent),#28b64a);color:#002;font-weight:800;cursor:pointer;box-shadow:0 8px 18px rgba(0,0,0,0.45)}
+.btn.ghost{background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.06)}
+.btn.small{padding:8px 10px;font-size:13px}
+.btn:disabled {opacity: 0.5; cursor: not-allowed;} /* 禁用样式 */
+
+
+/* right */
+.right{display:flex;flex-direction:column;gap:10px}
+.hdr-row{display:flex;justify-content:space-between;align-items:center;gap:12px}
+h1{margin:0;color:var(--accent);font-size:18px}
+.meta{color:var(--muted);font-size:13px}
+.stats{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.stat{background:var(--glass);padding:8px;border-radius:10px;min-width:110px}
+.stat .label{font-size:12px;color:var(--muted)}
+.stat .val{font-weight:700;margin-top:6px}
+#log{margin-top:8px;padding:12px;border-radius:10px;background:rgba(0,0,0,0.25);max-height:420px;overflow:auto;font-size:13px;color:#dfeff0;white-space:pre-wrap}
+
+/* modal */
+.modal-overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.45);backdrop-filter: blur(6px);z-index:80}
+.modal{width:92%;max-width:520px;background:linear-gradient(180deg,#0f1115,#0b0c10);border-radius:12px;padding:14px;box-shadow:0 20px 50px rgba(0,0,0,0.7);transform:scale(.96);opacity:0;transition:transform .28s var(--ease),opacity .28s var(--ease)}
+.modal.show{transform:scale(1);opacity:1}
+.modal h3{margin:0;color:var(--accent);font-size:18px}
+.modal p.lead{color:var(--muted);margin:8px 0 12px 0;font-size:13px}
+
+/* custom +/- selector */
+.selector{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:8px}
+.sel-block{background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));padding:8px;border-radius:10px;min-width:90px;text-align:center;border:1px solid rgba(255,255,255,0.03)}
+.sel-num{font-size:20px;font-weight:800}
+.icon-btn{background:transparent;border:1px solid rgba(255,255,255,0.04);border-radius:8px;padding:6px 10px;color:var(--muted);cursor:pointer}
+.icon-btn:active{transform:translateY(1px)}
+
+/* calendar */
+.calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:8px}
+.cal-day{height:40px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:700}
+.cal-day.disabled{color:rgba(255,255,255,0.12)}
+.cal-day.today{border:1px solid rgba(124,243,124,0.12)}
+.cal-day.selected{background:linear-gradient(180deg,var(--accent),#28b64a);color:#001}
+
+/* foot */
+.foot{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:#fff;padding:8px 12px;border-radius:8px}
+.primary{background:linear-gradient(180deg,var(--accent),#28b64a);padding:8px 12px;border-radius:8px;color:#001;font-weight:800}
+
+/* toast */
+.toast{position:fixed;left:50%;top:14%;transform:translateX(-50%);background:rgba(0,0,0,0.9);padding:12px 18px;border-radius:10px;z-index:200;display:none;transition:all .3s var(--ease)}
+.toast.show{display:block;animation:pop .3s var(--ease)}
+@keyframes pop{from{transform:translate(-50%,-10px);opacity:0}to{transform:translate(-50%,0);opacity:1}}
+.toast.error{background:rgba(255,107,107,0.85); color:#ffe; font-weight: 700;} /* 新增错误风格 */
+.toast .muted{color:inherit; opacity: 0.8;}
+
+.muted{color:var(--muted);font-size:13px}
+
+/* clear storage small */
+.clear-storage{background:transparent;border:1px dashed rgba(255,255,255,0.06);color:var(--muted);padding:6px 8px;border-radius:8px;font-size:13px;cursor:pointer}
+</style>
+</head>
+<body>
+  <div class="app">
+    <div class="card left">
+      <div id="lockCircle" class="circle" title="点击上锁/查看（隐藏模式）">
+        <div class="circle-inner">
+          <div id="circleTitle" class="circle-title">未上锁</div>
+          <div id="circleSub" class="circle-sub">点击上锁</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button id="connectBtn" class="btn small">连接设备</button>
+        <button id="timerBtn" class="btn small">设置定时</button>
+        <button id="lotteryBtn" class="btn small">🎁 抽奖</button>
+        <button id="batteryBtn" class="btn small ghost">🔋 查电量</button>
+      </div>
+
+      <div class="controls" style="margin-top: 6px;">
+        <button id="midUnlockBtn" class="btn small" style="display:none; background:#ff8c42">🔓 中途解锁</button>
+      </div>
+
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:6px">
+        <button id="guessBtn" class="ghost small" style="display:none">🕹️ 猜剩余时间</button>
+      </div>
+
+      <div style="text-align:center;margin-top:8px">
+        <div class="muted">目标结束：<span id="targetTime">-</span></div>
+        <div class="muted">剩余：<strong id="remainingText">-</strong></div>
+      </div>
+    </div>
+
+    <div class="card right">
+      <div class="hdr-row">
+        <div>
+          <h1>智能锁 · v2.5.2 Web BLE</h1>
+          <div class="meta" style="color:#f99">🚨 需 HTTPS/localhost, 兼容 Chrome/Edge</div>
+        </div>
+        <div>
+        </div>
+      </div>
+
+      <div class="stats" style="margin-top:12px">
+        <div class="stat"><div class="label">连接</div><div id="connStatus" class="val">未连接</div></div>
+        <div class="stat"><div class="label">锁定</div><div id="lockStatusDisplay" class="val">未上锁</div></div>
+        <div class="stat"><div class="label">电量</div><div id="countShort" class="val">—</div></div>
+      </div>
+
+      <div id="log">日志区（Web BLE 交互）\n</div>
+    </div>
+  </div>
+    
+  <div id="timerModal" class="modal-overlay">
+    <div class="modal" role="dialog" aria-modal="true">
+      <h3>设置定时</h3>
+      <p class="lead">选择倒计时/日期/随机。倒计时使用加/减按钮（更适合触控）。</p>
+  
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+          <div style="flex:1">
+          <div class="label">模式</div>
+          <div style="display:flex;gap:8px">
+              <button id="modeCountdown" class="fake-mode primary" style="flex:1">倒计时</button>
+              <button id="modeDate" class="fake-mode ghost" style="flex:1">指定日期</button>
+              <button id="modeRandom" class="fake-mode ghost" style="flex:1">随机</button>
+          </div>
+          </div>
+      </div>
+  
+      <div id="countdownBlock">
+          <div class="selector">
+          <div class="sel-block">
+              <div class="muted">天</div>
+              <div class="sel-num" id="daysVal">0</div>
+              <div style="display:flex;gap:6px;margin-top:8px;justify-content:center">
+              <button class="icon-btn" id="daysMinus">-</button>
+              <button class="icon-btn" id="daysPlus">+</button>
+              </div>
+          </div>
+          <div class="sel-block">
+              <div class="muted">小时</div>
+              <div class="sel-num" id="hoursVal">0</div>
+              <div style="display:flex;gap:6px;margin-top:8px;justify-content:center">
+              <button class="icon-btn" id="hoursMinus">-</button>
+              <button class="icon-btn" id="hoursPlus">+</button>
+              </div>
+          </div>
+          <div class="sel-block">
+              <div class="muted">分钟</div>
+              <div class="sel-num" id="minsVal">5</div>
+              <div style="display:flex;gap:6px;margin-top:8px;justify-content:center">
+              <button class="icon-btn" id="minsMinus">-</button>
+              <button class="icon-btn" id="minsPlus">+</button>
+              </div>
+          </div>
+          </div>
+      </div>
+  
+      <div id="dateBlock" style="display:none">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+          <button id="prevMon" class="ghost">◀</button>
+          <div id="monthLabel" class="muted">2025 年 11 月</div>
+          <button id="nextMon" class="ghost">▶</button>
+          </div>
+          <div class="calendar" id="calendarGrid"></div>
+          <div style="display:flex;gap:8px;justify-content:center;margin-top:10px">
+          <div class="sel-block" style="width:120px">
+              <div class="muted">小时</div>
+              <div class="sel-num" id="dateHour">12</div>
+              <div style="display:flex;gap:6px;margin-top:8px;justify-content:center">
+              <button class="icon-btn" id="dateHourMinus">-</button>
+              <button class="icon-btn" id="dateHourPlus">+</button>
+              </div>
+          </div>
+          <div class="sel-block" style="width:120px">
+              <div class="muted">分钟</div>
+              <div class="sel-num" id="dateMin">0</div>
+              <div style="display:flex;gap:6px;margin-top:8px;justify-content:center">
+              <button class="icon-btn" id="dateMinMinus">-</button>
+              <button class="icon-btn" id="dateMinPlus">+</button>
+              </div>
+          </div>
+          </div>
+      </div>
+  
+      <div id="randomBlock" style="display:none;margin-top:10px">
+          <label style="display:flex;align-items:center;gap:8px">
+          <input id="randomHide" type="checkbox" /> <span class="muted">隐藏剩余时间（允许查看/猜测）</span>
+          </label>
+      </div>
+
+      <div style="margin-top:12px;padding-top:12px;border-top:1px dashed rgba(255,255,255,0.06)">
+          <div class="label" style="margin-bottom:6px">定时期间中途解锁权限设置 (非手动模式)</div>
+          <div style="display:flex;gap:12px;align-items:flex-start">
+              
+              <div class="sel-block" style="min-width:70px;flex:1">
+                  <div class="muted">总次数</div>
+                  <div class="sel-num" id="unlockCountVal">0</div>
+                  <div style="display:flex;gap:6px;margin-top:8px;justify-content:center">
+                      <button class="icon-btn" id="unlockCountMinus">-</button>
+                      <button class="icon-btn" id="unlockCountPlus">+</button>
+                  </div>
+              </div>
+              
+              <div class="sel-block" style="min-width:70px;flex:1">
+                  <div class="muted">间隔 (天)</div>
+                  <div class="sel-num" id="intervalDaysVal">0</div>
+                  <div style="display:flex;gap:6px;margin-top:8px;justify-content:center">
+                      <button class="icon-btn" id="intervalDaysMinus">-</button>
+                      <button class="icon-btn" id="intervalDaysPlus">+</button>
+                  </div>
+              </div>
+              
+          </div>
+          <div style="font-size:13px;color:var(--muted);padding:8px 0 0 0">
+              <div style="margin-top:4px">设定 **0** 次或 **0** 间隔表示**不允许**中途解锁。</div>
+              <div style="margin-top:4px">解锁后需**手动点击圆环重锁**，定时继续。</div>
+          </div>
+      </div>
+      <div class="foot">
+          <button id="cancelTimer" class="ghost">取消</button>
+          <button id="confirmTimer" class="primary">确定</button>
+      </div>
+    </div>
+  </div>
+  
+    <div id="lotteryModal" class="modal-overlay">
+        <div class="modal">
+        <h3>抽奖（10% ~ 60%）</h3>
+        <p class="lead">仅在定时锁定（非手动）可用</p>
+        <div class="lottery-anim" style="height:72px;border-radius:10px;background:#0f0f10;display:flex;align-items:center;justify-content:center;margin:12px 0"><span style="opacity:.2">正在抽奖…</span></div>
+        <div id="lotteryResult" style="display:none;text-align:center">
+            <div id="lotteryMain" style="font-size:18px"></div>
+            <div id="lotteryDetail" class="muted" style="margin-top:6px"></div>
+        </div>
+        <div class="foot">
+            <button id="closeLottery" class="ghost">关闭</button>
+            <button id="doLottery" class="primary">开始抽奖</button>
+        </div>
+        </div>
+    </div>
+  
+    <div id="viewModal" class="modal-overlay">
+        <div class="modal">
+        <h3>查看剩余时间</h3>
+        <p class="lead">查看会奖励少量延长（仅一次） — 查看后剩余将**再次隐藏**</p>
+        <div class="lottery-anim" style="height:72px;border-radius:10px;background:#0f0f10;display:flex;align-items:center;justify-content:center;margin:12px 0"><span style="opacity:.2">准备查看…</span></div>
+        <div id="viewResult" style="display:none;text-align:center">
+            <div id="viewMain" style="font-size:18px"></div>
+            <div id="viewDetail" class="muted" style="margin-top:6px"></div>
+        </div>
+        <div class="foot">
+            <button id="closeView" class="ghost">关闭</button>
+            <button id="doView" class="primary" style="background:#6ec6ff;color:#000">查看并获得奖励</button>
+        </div>
+        </div>
+    </div>
+  
+    <div id="guessModal" class="modal-overlay">
+        <div class="modal">
+        <h3>猜剩余時間</h3>
+        <p class="muted">误差 &lt;10% 算成功（猜錯则增加时间）</p>
+        <div style="display:flex;gap:8px;justify-content:center;margin-top:10px">
+            <div class="sel-block"><div class="muted">天</div><div class="sel-num" id="gDays">0</div><div style="display:flex;gap:6px;margin-top:8px"><button class="icon-btn" id="gDaysMinus">-</button><button class="icon-btn" id="gDaysPlus">+</button></div></div>
+            <div class="sel-block"><div class="muted">时</div><div class="sel-num" id="gHours">0</div><div style="display:flex;gap:6px;margin-top:8px"><button class="icon-btn" id="gHoursMinus">-</button><button class="icon-btn" id="gHoursPlus">+</button></div></div>
+            <div class="sel-block"><div class="muted">分</div><div class="sel-num" id="gMins">0</div><div style="display:flex;gap:6px;margin-top:8px"><button class="icon-btn" id="gMinsMinus">-</button><button class="icon-btn" id="gMinsPlus">+</button></div></div>
+        </div>
+        <div class="foot">
+            <button id="closeGuess" class="ghost">取消</button>
+            <button id="doGuess" class="primary" style="background:#ffd54f;color:#000">提交猜测</button>
+        </div>
+        </div>
+    </div>
+  
+    <div id="guessToast" class="toast"></div>
+
+
+<script>
+/* ---------- constants & state ---------- */
+const MAX_SECONDS = 90 * 24 * 3600;
+const MIN_SECONDS = 60;
+let connected=false, total=0, remaining=0, timerId=null, targetEnd=null;
+let hideMode=false, viewUsed=false, batteryLevel=85;
+
+// **V2.5 核心状态**
+let lockStatus = 'unlocked'; // 'locked_manual', 'locked_timer', 'unlocked_temp' (定时期间临时解锁)
+let maxUnlockCount = 0;       // 定时期间最大开锁次数
+let usedUnlockCount = 0;      // 已用开锁次数
+let intervalDays = 0;         // 定时期间允许解锁的间隔天数 (0=不限制)
+let lastUnlockTime = 0;       // 上次成功中途解锁的时间戳 (用于计算间隔天数)
+
+/* BLE UUIDs (Inferred from user's data) */
+const SERVICE_UUID = '00008ac0-0000-1000-8000-00805f9b34fb';
+const WRITE_CHAR_UUID = '00008ac1-0000-1000-8000-00805f9b34fb';
+const DEVICE_NAME_PREFIX = ['AA-A100']; // Match AA-A100X devices
+
+/* DOM helper */
+const $ = id => document.getElementById(id);
+const midUnlockBtn = $('midUnlockBtn'); 
+
+/* logging */
+function log(msg){
+  const area = $('log'); const ts = new Date().toLocaleTimeString();
+  area.textContent += `[${ts}] ${msg}\n`; area.scrollTop = area.scrollHeight; console.log(msg);
+}
+function logError(msg){ log(`❌ 错误: ${msg}`); }
+
+/* format */
+function fmt(sec){ if(!sec||sec<=0) return '0秒'; const d=Math.floor(sec/86400), h=Math.floor((sec%86400)/3600), m=Math.floor((sec%3600)/60), s=sec%60; return `${d?d+'天 ':''}${h?h+'小时 ':''}${m?m+'分 ':''}${s}秒`; }
+
+/**
+ * V2.5 统一命令：构建 4 字节开关锁 BLE 命令 (DataView)
+ * 用于手动开关锁、定时锁启动/结束、中途解锁/重锁。
+ * @param {boolean} lock - true: 关锁 (AA 01 00 00), false: 开锁 (AA 01 01 00)
+ * @returns {DataView} 4 字节的 DataView
+ */
+function buildCommand(lock) {
+    // 命令格式: AA 01 [Status] 00
+    // lock=true -> Status=00 (关锁/上锁)
+    // lock=false -> Status=01 (开锁/解锁)
+    const status = lock ? 0x00 : 0x01;
+    const arr = [0xAA, 0x01, status, 0x00];
+    const dataView = new DataView(new Uint8Array(arr).buffer);
+    const hexStr = arr.map(b => b.toString(16).padStart(2, '0')).join(' ').toUpperCase();
+    return { dataView, hexStr };
+}
+
+/* ---------- Web Bluetooth Manager ---------- */
+const BleManager = {
+    device: null,
+    writeCharacteristic: null,
+
+    async connect() {
+        if (!navigator.bluetooth) {
+            logError('您的浏览器不支持 Web Bluetooth API，请使用 Chrome 或 Edge (HTTPS/localhost)');
+            return false;
+        }
+
+        try {
+            log('🔎 正在搜索设备 (名称 AA-A100*)...');
+            const device = await navigator.bluetooth.requestDevice({
+                filters: [{ namePrefix: 'AA-A100' }],
+                optionalServices: ['generic_access', SERVICE_UUID] 
+            });
+            this.device = device;
+            this.device.addEventListener('gattserverdisconnected', this.onDisconnected);
+
+            log(`🔗 尝试连接: ${device.name}`);
+            const server = await device.gatt.connect();
+
+            log(`🛠️ 获取服务: ${SERVICE_UUID}`);
+            const service = await server.getPrimaryService(SERVICE_UUID);
+
+            log(`✍️ 获取写入特征值: ${WRITE_CHAR_UUID}`);
+            this.writeCharacteristic = await service.getCharacteristic(WRITE_CHAR_UUID);
+            
+            connected = true;
+            log(`✅ 连接成功！设备: ${device.name}`);
+            updateUI();
+            return true;
+
+        } catch (error) {
+            logError(`连接失败: ${error.message}`);
+            connected = false;
+            this.device = null;
+            this.writeCharacteristic = null;
+            updateUI();
+            return false;
+        }
+    },
+
+    onDisconnected(event) {
+        log(`🔴 设备已断开: ${event.target.name}`);
+        connected = false;
+        BleManager.device = null;
+        BleManager.writeCharacteristic = null;
+        updateUI();
+    },
+
+    async disconnect() {
+        if (this.device && this.device.gatt.connected) {
+            this.device.gatt.disconnect();
+            log('👋 已断开连接');
+            connected = false;
+            updateUI();
+        }
+    },
+
+    /**
+     * 发送数据到写入特征值
+     */
+    async sendData(dataView, commandName) {
+        if (!connected || !this.writeCharacteristic) {
+            logError(`🚫 无法发送 ${commandName}: 设备未连接或特征值不可用。`);
+            return false;
+        }
+        try {
+            await this.writeCharacteristic.writeValue(dataView.buffer);
+            log(`📤 [${commandName}] 发送成功: ${Array.from(new Uint8Array(dataView.buffer)).map(b=>b.toString(16).padStart(2,'0')).join(' ').toUpperCase()}`);
+            return true;
+        } catch (error) {
+            logError(`写入失败 [${commandName}]: ${error.message}`);
+            return false;
+        }
+    }
+};
+
+/* ---------- localStorage persistence ---------- */
+const STORAGE_KEY = 'smartlock_v2_5_state';
+function saveState(){
+    try{
+        const state = { 
+            lockStatus, total, remaining, targetEnd, hideMode, viewUsed, batteryLevel,
+            maxUnlockCount, usedUnlockCount, intervalDays, lastUnlockTime 
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }catch(e){ console.warn('saveState err',e); }
+}
+
+function clearSavedState(){
+    localStorage.removeItem(STORAGE_KEY);
+}
+
+function loadState(){
+    try{
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if(!raw) return false;
+        const s = JSON.parse(raw);
+        
+        // 恢复 V2.5 状态
+        lockStatus = s.lockStatus || 'unlocked'; 
+        total = s.total || 0; 
+        hideMode = !!s.hideMode; 
+        viewUsed = !!s.viewUsed; 
+        batteryLevel = s.batteryLevel || 85;
+
+        maxUnlockCount = s.maxUnlockCount || 0;
+        usedUnlockCount = s.usedUnlockCount || 0;
+        intervalDays = s.intervalDays || 0;
+        lastUnlockTime = s.lastUnlockTime || 0;
+        
+        // 恢复计时器
+        if (s.targetEnd){
+            targetEnd = s.targetEnd; 
+            const rem = Math.floor((targetEnd - Date.now())/1000);
+            remaining = Math.max(0, rem);
+
+            if ((lockStatus.startsWith('locked') || lockStatus === 'unlocked_temp') && remaining > 0){
+                startCountdown(remaining, { hide: hideMode, resume:true });
+            } else if (remaining <= 0){
+                // 定时结束，清理状态
+                lockStatus = 'unlocked'; total=0; remaining=0; targetEnd=null; usedUnlockCount=0; lastUnlockTime=0;
+                log('⚠️ 恢复状态时发现倒计时已过期，已重置为未上锁');
+            }
+        }
+        return true;
+    }catch(e){ console.warn('loadState err', e); return false; }
+}
+
+/**
+ * 通用的 Toast 提示函数 (替代 alert)
+ * @param {string} mainMsg - 主要信息
+ * @param {string} detailMsg - 详细信息 (可选)
+ * @param {boolean} isError - 是否是错误/阻止提示
+ */
+function showToast(mainMsg, detailMsg, isError = false) { 
+    const t=$('guessToast'); 
+    t.innerHTML = `<div style="font-size:16px">${mainMsg}</div>${detailMsg ? `<div class="muted" style="margin-top:2px">${detailMsg}</div>` : ''}`;
+    t.classList.remove('show', 'error');
+    if (isError) {
+        t.classList.add('error');
+    }
+    t.classList.add('show'); 
+    t.style.display='block'; 
+    setTimeout(()=>{ t.classList.remove('show'); t.style.display='none'; },2800); 
+}
+
+/**
+ * V2.4/V2.5 核心：执行中途解锁的独立函数
+ */
+function executeMidUnlock() {
+    lockStatus = 'unlocked_temp'; // 状态变为临时解锁
+    usedUnlockCount++;          // 使用次数+1
+    lastUnlockTime = Date.now(); // 更新上次解锁时间
+
+    // 发送解锁命令 (4 字节)
+    const { dataView } = buildCommand(false); // false = 解锁
+    BleManager.sendData(dataView, '定时期间允许解锁 (4 字节)');
+    
+    // V2.5.2 修正：临时解锁成功时，隐藏模式下不泄露剩余次数
+    const toastDetail = hideMode ? '重锁后定时继续' : `剩余 ${maxUnlockCount - usedUnlockCount} 次`;
+    showToast('✅ 临时解锁成功', toastDetail, false);
+
+    log(`🔓 定时期间允许解锁：剩余 ${maxUnlockCount - usedUnlockCount} 次。`);
+    
+    updateUI(); // UI 更新显示临时解锁状态
+}
+
+/**
+ * V2.5.2 核心：根据 hideMode 和 lockStatus 获取剩余时间的显示文本
+ */
+function getRemainingDisplayText() {
+    // 处于定时锁定状态
+    if (lockStatus === 'locked_timer' || lockStatus === 'unlocked_temp') {
+        // 只要定时任务在运行，且 hideMode 为 true，那么无论 locked_timer 还是 unlocked_temp 都隐藏时间
+        if (hideMode) {
+            // 只有主动点击“查看”按钮后，viewModal 中才会短暂显示真实时间
+            return '已隐藏 (猜/看)'; 
+        }
+        return fmt(remaining); // 非隐藏模式，显示精确时间
+    }
+    // 非定时锁定状态
+    return '-';
+}
+
+
+/* UI update */
+function updateUI(){
+    const connState = connected ? '已连接' : (BleManager.device ? '断开' : '未连接');
+    $('connStatus').textContent = connState;
+    $('connectBtn').textContent = connected ? '断开连接' : '连接设备';
+    
+    // **核心锁定状态显示**
+    let lockStatusText = '未上锁';
+    let isTimerMode = lockStatus === 'locked_timer';
+    let isTempUnlocked = lockStatus === 'unlocked_temp';
+    const hasUnlockPermission = maxUnlockCount > 0; 
+
+    if (lockStatus === 'locked_manual') {
+        lockStatusText = '手动上锁';
+    } else if (isTimerMode || isTempUnlocked) {
+        const unlockLeft = maxUnlockCount - usedUnlockCount;
+        lockStatusText = isTempUnlocked ? '临时解锁' : (hideMode ? '定时（隐藏）' : '定时锁定');
+        if (maxUnlockCount > 0 && !hideMode) { // V2.5.2 修正：隐藏模式下不显示次数
+            lockStatusText += ` (${Math.max(0, unlockLeft)}/${maxUnlockCount} 次)`;
+        }
+    }
+    $('lockStatusDisplay').textContent = lockStatusText;
+
+    // 电量显示
+    $('countShort').textContent = `${batteryLevel}%`;
+    
+    // V2.5.2 修正 1：处理目标结束时间
+    let targetTimeDisplay = targetEnd ? new Date(targetEnd).toLocaleString() : '-';
+    if ((lockStatus === 'locked_timer' || lockStatus === 'unlocked_temp') && hideMode) {
+        targetTimeDisplay = '已隐藏';
+    }
+    $('targetTime').textContent = targetTimeDisplay;
+    
+    // **V2.5 剩余时间/圆环/状态逻辑**
+    let remainingDisplay = getRemainingDisplayText();
+    
+    const circle = $('lockCircle'), title = $('circleTitle'), sub = $('circleSub');
+
+    // 圆环样式
+    circle.classList.remove('locked_timer', 'locked_manual', 'flash-success', 'flash-fail'); 
+
+    if (isTimerMode || isTempUnlocked) {
+        const ratio = total>0 ? Math.max(0,Math.min(1,remaining/total)) : 0;
+        const deg = ratio*360;
+        circle.style.background = `conic-gradient(var(--accent-2) ${deg}deg,#2a2a30 0deg)`;
+        circle.classList.add('locked_timer');
+
+        // V2.5.2 修正 2：如果临时解锁是基于隐藏模式开启的，标题也应更具欺骗性
+        title.textContent = isTempUnlocked ? 
+            (hideMode ? '🔓 临时解锁中（计时隐藏）' : '🔓 临时解锁中') : 
+            (hideMode ? '🔒 定时中（隐藏）' : '🔒 定时中');
+
+        const unlockLeft = maxUnlockCount - usedUnlockCount;
+        
+        let subText;
+        if (hideMode) {
+             // V2.5.1/2 修正：隐藏模式下 Sub Text 必须是提示文本 (无论锁定还是临时解锁)
+             subText = isTempUnlocked ? '计时隐藏中，点击圆环可重锁' : (viewUsed ? '已查看（查看功能已用）' : '点击圆环可查看 (1 次)');
+             circle.title = isTempUnlocked ? '点击重锁' : '点击查看剩余时间'; 
+        } else {
+             // 非隐藏模式 
+             subText = remainingDisplay;
+             if (maxUnlockCount > 0) {
+                 const dayStr = intervalDays > 0 ? ` (≥${intervalDays}天)` : '';
+                 subText += (subText !== '-') ? ` - 剩 ${Math.max(0, unlockLeft)} 次${dayStr}` : `剩余 ${Math.max(0, unlockLeft)} 次${dayStr}`;
+             }
+
+             // 非隐藏模式，圆环点击承担解锁或重锁功能
+             circle.title = isTempUnlocked ? '点击重锁' : 
+                            (hasUnlockPermission ? `点击中途解锁 (剩 ${Math.max(0, unlockLeft)} 次)` : '定时锁定中');
+        }
+        sub.textContent = subText;
+
+    } else if (lockStatus === 'locked_manual') {
+        circle.style.background = 'conic-gradient(var(--accent) 360deg,#2a2a30 0deg)';
+        title.textContent = '🔒 手动锁定';
+        sub.textContent = '点击解锁';
+        circle.classList.add('locked_manual');
+        circle.title = '点击解锁';
+    } else { // unlocked
+        circle.style.background = 'conic-gradient(var(--accent-2) 0deg,#2a2a30 0deg)';
+        title.textContent = connected ? '🟢 已连接' : '未上锁';
+        sub.textContent = '点击上锁';
+        circle.title = '点击上锁';
+    }
+
+    $('remainingText').textContent = remainingDisplay;
+    $('guessBtn').style.display = (isTimerMode && hideMode) ? 'inline-block' : 'none';
+
+    // V2.4/V2.5 核心：控制中途解锁按钮的显示
+    if ((isTimerMode || isTempUnlocked) && hasUnlockPermission) {
+        midUnlockBtn.style.display = 'inline-block';
+        
+        const unlockLeft = maxUnlockCount - usedUnlockCount;
+        const daysPassed = (Date.now() - lastUnlockTime) / (1000 * 3600 * 24);
+        const intervalOk = intervalDays === 0 || lastUnlockTime === 0 || daysPassed >= intervalDays;
+        
+        if (unlockLeft <= 0 || !intervalOk) {
+            midUnlockBtn.disabled = true;
+            midUnlockBtn.textContent = `解锁次数/间隔不足`;
+            midUnlockBtn.style.background = '#444';
+        } else {
+            midUnlockBtn.disabled = false;
+            // V2.5.2 修正：隐藏模式下不显示次数
+            midUnlockBtn.textContent = hideMode ? `🔓 中途解锁` : `🔓 中途解锁 (${Math.max(0, unlockLeft)}/${maxUnlockCount})`;
+            midUnlockBtn.style.background = '#ff8c42';
+        }
+        
+    } else {
+        midUnlockBtn.style.display = 'none';
+    }
+
+    saveState();
+}
+
+/* ---------- click handlers (CORE LOGIC MODIFICATION) ---------- */
+$('connectBtn').addEventListener('click', ()=>{ 
+    if (connected) { BleManager.disconnect(); } else { BleManager.connect(); }
+});
+
+// V2.4/V2.5: 新增中途解锁专用按钮的点击事件
+midUnlockBtn.addEventListener('click', () => {
+    if (lockStatus !== 'locked_timer' && lockStatus !== 'unlocked_temp') return; 
+
+    if (lockStatus === 'unlocked_temp') {
+        showToast('⚠️ 已是临时解锁状态', '请点击圆环重锁后再进行此操作', true);
+        return;
+    }
+
+    const unlockLeft = maxUnlockCount - usedUnlockCount;
+    const daysPassed = (Date.now() - lastUnlockTime) / (1000 * 3600 * 24);
+    const intervalOk = intervalDays === 0 || lastUnlockTime === 0 || daysPassed >= intervalDays;
+
+    if (!connected) {
+        showToast('设备未连接', '请先连接设备才能解锁', true);
+        return;
+    }
+
+    if (unlockLeft > 0 && intervalOk) {
+        // 允许中途解锁
+        executeMidUnlock();
+    } else {
+        // 阻止操作提示
+        if (unlockLeft <= 0) {
+            showToast('⛔ 解锁失败', '已达到设置的最大开锁次数', true);
+            log('⛔ 定时锁定中，不能解锁 (已达最大开锁次数)');
+        } else if (!intervalOk) {
+            const daysToWait = Math.ceil(intervalDays - daysPassed);
+            showToast('⛔ 解锁失败', `需等待 ${daysToWait} 天后才能再次解锁`, true);
+            log(`⛔ 定时锁定中，不能解锁 (需等待 ${daysToWait} 天后)`);
+        }
+    }
+});
+
+$('lockCircle').addEventListener('click', ()=>{
+    if (!connected) { logError('🚫 请先连接设备'); showToast('设备未连接', '请点击 "连接设备" 按钮', true); return; }
+
+    // 1. **定时模式下：隐藏时间模式** (V2.5.1: 圆环点击只处理查看)
+    if (lockStatus === 'locked_timer' && hideMode) {
+        if (viewUsed) {
+            log('⚠️ 查看功能已使用过一次，阻止再次使用。'); 
+            showToast('⚠️ 查看功能已用', '仅能使用一次', true);
+            return;
+        }
+        showModal('viewModal'); $('viewResult').style.display='none';
+        return;
+    }
+    
+    // 2. **定时模式下：中途解锁** (非隐藏模式下，圆环仍承担解锁功能)
+    if (lockStatus === 'locked_timer' && !hideMode){
+        const unlockLeft = maxUnlockCount - usedUnlockCount;
+        const daysPassed = (Date.now() - lastUnlockTime) / (1000 * 3600 * 24);
+        const intervalOk = intervalDays === 0 || lastUnlockTime === 0 || daysPassed >= intervalDays;
+        
+        if (unlockLeft > 0 && intervalOk) {
+            // 允许中途解锁
+            executeMidUnlock();
+            return;
+        } 
+        
+        // 阻止操作提示
+        if (unlockLeft <= 0) {
+            showToast('⛔ 解锁失败', '已达到设置的最大开锁次数', true);
+            log('⛔ 定时锁定中，不能解锁 (已达最大开锁次数)');
+        } else if (!intervalOk) {
+            const daysToWait = Math.ceil(intervalDays - daysPassed);
+            showToast('⛔ 解锁失败', `需等待 ${daysToWait} 天后才能再次解锁`, true);
+            log(`⛔ 定时锁定中，不能解锁 (需等待 ${daysToWait} 天后)`);
+        }
+        return;
+    }
+
+    // 3. **定时模式下：上锁** (lockStatus: unlocked_temp -> locked_timer)
+    if (lockStatus === 'unlocked_temp'){
+        // 手动重锁，定时继续运行
+        lockStatus = 'locked_timer'; 
+        
+        // 发送上锁命令 (4 字节)
+        const { dataView } = buildCommand(true); // true = 上锁
+        BleManager.sendData(dataView, '手动恢复定时锁定 (4 字节)');
+        showToast('🔒 恢复锁定', '定时继续运行', false);
+        log('🔒 手动恢复锁定，定时继续');
+        updateUI();
+        return;
+    }
+
+
+    // 4. **手动模式/普通模式切换** (lockStatus: unlocked <-> locked_manual)
+    if (lockStatus === 'locked_manual' || lockStatus === 'unlocked') {
+        const isManualLock = lockStatus === 'unlocked'; // 决定下一步是上锁还是解锁
+        
+        lockStatus = isManualLock ? 'locked_manual' : 'unlocked';
+        
+        // 如果手动上锁，清理任何定时状态
+        if (isManualLock && timerId){
+            clearInterval(timerId); timerId=null; targetEnd=null; total=0; remaining=0;
+            usedUnlockCount = 0; maxUnlockCount = 0; intervalDays = 0; lastUnlockTime = 0;
+            hideMode = false; viewUsed = false;
+        }
+        
+        // 发送 4 字节开关命令
+        const { dataView } = buildCommand(isManualLock);
+        BleManager.sendData(dataView, isManualLock ? '手动上锁 (4 字节)' : '手动解锁 (4 字节)');
+        showToast(isManualLock ? '🔒 手动锁定' : '🔓 已解锁', isManualLock ? '定时状态已清除' : '设备已解锁', false);
+        updateUI();
+        return;
+    }
+});
+
+$('batteryBtn').addEventListener('click', ()=>{
+    if (!connected) { logError('🚫 请先连接设备'); showToast('设备未连接', '请点击 "连接设备" 按钮', true); return; }
+    
+    // V2.5: 查电量命令是未知的，我们只能发送一个空的 4 字节命令 AA 00 00 00 来模拟触发上报
+    const arr = [0xAA, 0x00, 0x00, 0x00]; // 假设的查询/触发命令
+    const dataView = new DataView(new Uint8Array(arr).buffer);
+    BleManager.sendData(dataView, '查询电量 (未知 4 字节/模拟)');
+    
+    // 模拟接收
+    setTimeout(() => {
+        batteryLevel = Math.max(10, batteryLevel - Math.floor(Math.random() * 5));
+        log(`📥 [模拟接收] 设备返回电量：${batteryLevel}%`);
+        showToast('🔋 电量查询成功', `当前电量：${batteryLevel}%`, false);
+        updateUI();
+    }, 800);
+});
+
+/* ---------- timer start/stop ---------- */
+function clampSeconds(s){ return Math.max(MIN_SECONDS, Math.min(MAX_SECONDS, s)); }
+function startCountdown(seconds, options={hide:false,resume:false}){
+    if (!connected && !options.resume) { logError('🚫 请先连接设备才能设置定时'); return; }
+    let sec = clampSeconds(seconds);
+    if (seconds !== sec) log(`⚠️ 时间超出限制，已调整为 ${fmt(sec)}`);
+    if (timerId && !options.resume){ clearInterval(timerId); timerId=null; }
+    
+    total = sec;
+    remaining = sec;
+    lockStatus = 'locked_timer'; // 状态设为定时锁定
+    hideMode = !!options.hide;
+    viewUsed = false;
+
+    if (!options.resume){
+        usedUnlockCount = 0; 
+        lastUnlockTime = 0; 
+    }
+    
+    if (!options.resume){ targetEnd = Date.now() + remaining*1000; }
+    if (!targetEnd) targetEnd = Date.now() + remaining*1000;
+
+    // V2.5: 统一使用 4 字节上锁命令
+    if (!options.resume){
+        const { dataView } = buildCommand(true); // true = 上锁
+        BleManager.sendData(dataView, `定时锁启动 (4 字节)`);
+        
+        // V2.5.1 修正：隐藏模式不显示精确时间
+        const toastDetail = hideMode ? '剩余时间已隐藏，请使用 "猜" 或 "看"' : `时长: ${fmt(sec)}`;
+        showToast('🔒 定时锁定成功', toastDetail, false);
+    } else {
+        log(`🔄 恢复定时（不发送命令）`);
+    }
+    updateUI();
+
+    timerId = setInterval(()=>{
+        remaining = Math.max(0, Math.floor((targetEnd - Date.now())/1000));
+        if (remaining<=0){
+            clearInterval(timerId); timerId=null; remaining=0; 
+            
+            lockStatus = 'unlocked'; 
+            usedUnlockCount = 0; maxUnlockCount = 0; intervalDays = 0; lastUnlockTime = 0;
+            targetEnd=null; total=0; hideMode=false; viewUsed=false;
+
+            // V2.5: 统一使用 4 字节解锁命令
+            const { dataView } = buildCommand(false); // false = 解锁
+            BleManager.sendData(dataView, '自动解锁 (4 字节)');
+            showToast('🔓 倒计时结束', '设备已自动解锁', false);
+            log('⏰ 倒计时结束，自动解锁');
+            updateUI();
+            return;
+        }
+        updateUI();
+    },1000);
+}
+
+/* ---------- timer modal UI and logic (UNCHANGED from V2.4) ---------- */
+function showModal(id){ const el=$(id); el.style.display='flex'; const m=el.querySelector('.modal'); setTimeout(()=>m.classList.add('show'),10); }
+function hideModal(id){ const el=$(id); const m=el.querySelector('.modal'); m.classList.remove('show'); setTimeout(()=>el.style.display='none',240); }
+
+let selectedMode = 'countdown';
+$('modeCountdown').addEventListener('click', ()=>{ selectedMode='countdown'; toggleModeUI(); });
+$('modeDate').addEventListener('click', ()=>{ selectedMode='date'; toggleModeUI(); });
+$('modeRandom').addEventListener('click', ()=>{ selectedMode='random'; toggleModeUI(); });
+function toggleModeUI(){
+    $('modeCountdown').classList.toggle('primary', selectedMode==='countdown'); $('modeCountdown').classList.toggle('ghost', selectedMode!=='countdown');
+    $('modeDate').classList.toggle('primary', selectedMode==='date'); $('modeDate').classList.toggle('ghost', selectedMode!=='date');
+    $('modeRandom').classList.toggle('primary', selectedMode==='random'); $('modeRandom').classList.toggle('ghost', selectedMode!=='random');
+    $('countdownBlock').style.display = selectedMode==='countdown' ? 'block' : 'none';
+    $('dateBlock').style.display = selectedMode==='date' ? 'block' : 'none';
+    $('randomBlock').style.display = selectedMode==='random' ? 'block' : 'none';
+}
+
+let days=0, hours=0, mins=5;
+let unlockCount = 0; 
+let intervalDaysLocal = 0; 
+
+function renderSelectors(){
+    $('daysVal').textContent = days; $('hoursVal').textContent = hours; $('minsVal').textContent = mins;
+    $('unlockCountVal').textContent = unlockCount; 
+    $('intervalDaysVal').textContent = intervalDaysLocal;
+}
+
+function clampSelectors(){
+    if (days<0) days=0; if (days>90) days=90;
+    if (hours<0) hours=0; if (hours>23) hours=23;
+    if (mins<0) mins=0; if (mins>59) mins=59;
+
+    if (unlockCount<0) unlockCount=0; if (unlockCount>99) unlockCount=99;
+    if (intervalDaysLocal<0) intervalDaysLocal=0; if (intervalDaysLocal>30) intervalDaysLocal=30; 
+
+    renderSelectors();
+}
+
+['daysPlus','daysMinus','hoursPlus','hoursMinus','minsPlus','minsMinus',
+ 'unlockCountPlus', 'unlockCountMinus',
+ 'intervalDaysPlus', 'intervalDaysMinus' 
+].forEach(id=>{
+    const el=$(id);
+    if(!el) return;
+    el.addEventListener('click', ()=>{
+        if (id==='daysPlus') days++; if (id==='daysMinus') days--;
+        if (id==='hoursPlus') hours++; if (id==='hoursMinus') hours--;
+        if (id==='minsPlus') mins += 5; if (id==='minsMinus') mins -= 5;
+        
+        if (id==='unlockCountPlus') unlockCount++;
+        if (id==='unlockCountMinus') unlockCount--;
+        
+        if (id==='intervalDaysPlus') intervalDaysLocal++; 
+        if (id==='intervalDaysMinus') intervalDaysLocal--; 
+
+        clampSelectors();
+    });
+});
+
+let calYear = new Date().getFullYear(), calMonth = new Date().getMonth(); window._calendarSelectedDate = null;
+function renderCalendar(){
+  const grid = $('calendarGrid'); grid.innerHTML=''; const y=calYear, m=calMonth;
+  const first = new Date(y,m,1); const startDow = first.getDay(); const daysInMonth = new Date(y,m+1,0).getDate();
+  for(let i=0;i<startDow;i++){ const el=document.createElement('div'); el.className='cal-day disabled'; grid.appendChild(el); }
+  for(let d=1; d<=daysInMonth; d++){
+    const el=document.createElement('div'); el.className='cal-day'; el.textContent=d;
+    const cellDate = new Date(y,m,d);
+    const now = new Date();
+    if (now.getFullYear()===y && now.getMonth()===m && now.getDate()===d) el.classList.add('today');
+    if (window._calendarSelectedDate && window._calendarSelectedDate.getFullYear()===y && window._calendarSelectedDate.getMonth()===m && window._calendarSelectedDate.getDate()===d) el.classList.add('selected');
+    el.addEventListener('click', ()=>{ window._calendarSelectedDate = new Date(y,m,d, window._calendarSelectedDate?window._calendarSelectedDate.getHours():12, window._calendarSelectedDate?window._calendarSelectedDate.getMinutes():0,0); renderCalendar(); });
+    grid.appendChild(el);
+  }
+  $('monthLabel').textContent = `${y} 年 ${m+1} 月`;
+}
+$('prevMon').addEventListener('click', ()=>{ calMonth--; if(calMonth<0){calMonth=11;calYear--} renderCalendar(); });
+$('nextMon').addEventListener('click', ()=>{ calMonth++; if(calMonth>11){calMonth=0;calYear++} renderCalendar(); });
+
+let dateHour = 12, dateMin = 0; function renderDateHM(){ $('dateHour').textContent=dateHour; $('dateMin').textContent=dateMin; }
+['dateHourPlus','dateHourMinus','dateMinPlus','dateMinMinus'].forEach(id=>{
+  $(id).addEventListener('click', ()=>{ if(id==='dateHourPlus') dateHour=(dateHour+1)%24; if(id==='dateHourMinus') dateHour=(dateHour+23)%24; if(id==='dateMinPlus') dateMin=(dateMin+5)%60; if(id==='dateMinMinus') dateMin=(dateMin+55)%60; renderDateHM(); });
+});
+
+$('timerBtn').addEventListener('click', ()=>{
+    if (!connected) { logError('🚫 请先连接设备才能设置定时'); showToast('设备未连接', '请点击 "连接设备" 按钮', true); return; }
+    if (lockStatus.startsWith('locked_timer') || lockStatus === 'unlocked_temp'){
+        showToast('⚠️ 无法设置定时', '当前已有进行中的定时任务', true);
+        log('⚠️ 阻止设置新的定时（已有定时）');
+        return;
+    }
+
+    showModal('timerModal');
+    selectedMode='countdown';
+    toggleModeUI();
+    
+    days=0; hours=0; mins=5;
+    unlockCount = maxUnlockCount; 
+    intervalDaysLocal = intervalDays; 
+
+    clampSelectors();
+    calYear = new Date().getFullYear(); calMonth = new Date().getMonth(); window._calendarSelectedDate = null; renderCalendar(); renderDateHM();
+    $('randomHide').checked=false;
+});
+
+$('cancelTimer').addEventListener('click', ()=> hideModal('timerModal'));
+$('confirmTimer').addEventListener('click', ()=>{
+    if (lockStatus.startsWith('locked_timer') || lockStatus === 'unlocked_temp'){ showToast('⚠️ 无法设置定时', '当前已有进行中的定时任务', true); hideModal('timerModal'); return; }
+    let sec = 0;
+    if (selectedMode==='countdown'){ sec = days*86400 + hours*3600 + mins*60; }
+    else if (selectedMode==='date'){ if(!window._calendarSelectedDate){ showToast('请选择日期', '', true); return; } const dt = new Date(window._calendarSelectedDate); dt.setHours(dateHour, dateMin,0,0); sec = Math.floor((dt.getTime()-Date.now())/1000); if (sec>MAX_SECONDS){ log('⚠️ 选择日期超过 90 天上限，自动调整'); sec = MAX_SECONDS; } }
+    else { sec = Math.floor(Math.random()*(MAX_SECONDS-MIN_SECONDS+1))+MIN_SECONDS; }
+    if (sec<=0){ showToast('请选择将来时间', '(>0 秒)', true); return; }
+    const hideChecked = $('randomHide').checked;
+
+    maxUnlockCount = unlockCount; 
+    intervalDays = intervalDaysLocal; 
+
+    hideModal('timerModal');
+    startCountdown(sec, { hide: selectedMode==='random' && hideChecked });
+});
+
+/* ---------- lottery, view, guess logic (V2.5.1/2 UPDATED for hiding time) ---------- */
+$('lotteryBtn').addEventListener('click', ()=>{ 
+    if (!connected) { logError('🚫 请先连接设备'); showToast('设备未连接', '请点击 "连接设备" 按钮', true); return; } 
+    if (lockStatus !== 'locked_timer'){ log('⚠️ 抽奖仅在定时锁定状态下可用'); showToast('⚠️ 无法抽奖', '抽奖仅在定时锁定状态下可用', true); return; }
+    showModal('lotteryModal'); $('lotteryResult').style.display='none'; 
+});
+$('closeLottery').addEventListener('click', ()=> hideModal('lotteryModal'));
+$('doLottery').addEventListener('click', ()=>{
+    if (lockStatus !== 'locked_timer'){ log('⚠️ 抽奖仅在定时锁定状态下可用'); $('doLottery').disabled=false; return; }
+    $('doLottery').disabled=true;
+    setTimeout(()=>{ 
+      const percent=Math.floor(Math.random()*51)+10; const add=Math.random()<0.5; const delta=Math.floor(remaining*(percent/100)); const prev=remaining;
+      
+      const newRemainingText = hideMode ? '时间已更新' : `新剩余 ${fmt(remaining)}`; // V2.5.1 修正 A1
+      
+      if (add){ 
+        remaining = Math.min(remaining+delta, MAX_SECONDS); 
+        $('lotteryMain').innerHTML=`<span style="color:#c7ffb3;font-weight:700">+${percent}%</span>`; 
+        $('lotteryDetail').textContent=`延长 ${fmt(delta)}，${newRemainingText}`; // V2.5.1 修正 A2
+      } else { 
+        remaining = Math.max(remaining-delta, MIN_SECONDS); 
+        $('lotteryMain').innerHTML=`<span style="color:#ffb3a8;font-weight:700">-${percent}%</span>`; 
+        $('lotteryDetail').textContent=`减少 ${fmt(delta)}，${newRemainingText}`; // V2.5.1 修正 A3
+      }
+      
+      $('lotteryResult').style.display='block'; targetEnd = Date.now()+remaining*1000; 
+      
+      // V2.5: 统一使用 4 字节上锁命令 (更新计时，重新发送锁定信号)
+      const {dataView} = buildCommand(true); 
+      BleManager.sendData(dataView, `抽奖更新定时 (4 字节)`);
+      
+      // V2.5.1 修正 A4：日志也要模糊化
+      const logRemaining = hideMode ? '时间已变化' : fmt(remaining); 
+      log(`🎁 抽奖结果：${add?'增加':'减少'} ${percent}%（${fmt(delta)}），新剩余 ${logRemaining}`); 
+      
+      updateUI(); $('doLottery').disabled=false; 
+    },1400);
+});
+
+$('closeView').addEventListener('click', ()=> { hideModal('viewModal'); $('viewResult').style.display='none'; saveState(); });
+
+$('doView').addEventListener('click', ()=>{
+    if (lockStatus !== 'locked_timer' || !connected) { logError('🚫 查看仅在定时锁定中可用'); hideModal('viewModal'); return; }
+    if (viewUsed) { log('⚠️ 查看功能已使用过一次，阻止再次使用。'); hideModal('viewModal'); return; }
+    
+    $('doView').disabled=true;
+
+    setTimeout(()=>{ 
+      const pct=Math.floor(Math.random()*3)+1; 
+      const delta=Math.floor(remaining*(pct/100)); 
+      remaining = Math.min(remaining+delta, MAX_SECONDS);
+      
+      viewUsed=true; 
+      targetEnd = Date.now()+remaining*1000;
+      
+      $('viewResult').style.display='block';
+      // V2.5.1 修正 B1：查看模式下，这里是唯一允许显示精确时间的地方
+      $('viewMain').textContent=`真实剩余：${fmt(remaining)}`; 
+      $('viewDetail').textContent=`查看奖励：延长 ${pct}%（+${fmt(delta)}），下次不能再查看`;
+      
+      // V2.5: 统一使用 4 字节上锁命令 (更新计时，重新发送锁定信号)
+      const {dataView} = buildCommand(true);
+      BleManager.sendData(dataView, `查看奖励更新定时 (4 字节)`);
+      
+      // V2.5.1 修正 B2：日志也要明确是查看模式下的显示
+      log(`👁️ 查看（隐藏）奖励 +${pct}%（+${fmt(delta)}），新剩余 ${fmt(remaining)}`);
+      
+      const c=$('lockCircle'); 
+      c.classList.add('flash-success'); 
+      setTimeout(()=>c.classList.remove('flash-success'),1600);
+      
+      updateUI(); 
+      
+      $('doView').disabled=true;
+      $('doView').textContent = '已使用';
+      $('doView').style.background = '#333';
+      $('doView').style.color = '#9aa0a6';
+    },900);
+});
+
+let gDays=0,gHours=0,gMins=0;
+function renderGuess(){ $('gDays').textContent=gDays; $('gHours').textContent=gHours; $('gMins').textContent=gMins; }
+['gDaysPlus','gDaysMinus','gHoursPlus','gHoursMinus','gMinsPlus','gMinsMinus'].forEach(id=>{
+  const el=$(id); if(!el) return; el.addEventListener('click', ()=>{ if(id==='gDaysPlus') gDays++; if(id==='gDaysMinus') gDays--; if(id==='gHoursPlus') gHours++; if(id==='gHoursMinus') gHours--; if(id==='gMinsPlus') gMins+=5; if(id==='gMinsMinus') gMins-=5; if(gDays<0)gDays=0; if(gDays>90)gDays=90; if(gHours<0)gHours=0; if(gHours>23)gHours=23; if(gMins<0)gMins=0; if(gMins>59)gMins=59; renderGuess(); });
+});
+$('guessBtn').addEventListener('click', ()=>{ 
+    if(!connected) { logError('🚫 请先连接设备'); showToast('设备未连接', '请点击 "连接设备" 按钮', true); return; } 
+    if(lockStatus !== 'locked_timer' || !hideMode){ log('⚠️ 猜时间仅在随机隐藏定时下可用'); showToast('⚠️ 猜时间不可用', '仅在随机隐藏定时模式下可用', true); return; } 
+    showModal('guessModal'); renderGuess(); 
+});
+$('closeGuess').addEventListener('click', ()=> hideModal('guessModal'));
+$('doGuess').addEventListener('click', ()=>{ 
+  const guessed = gDays*86400 + gHours*3600 + gMins*60; 
+  if(guessed<=0){ showToast('请输入有效猜测', '', true); return; } 
+  
+  const actual=remaining; const diff=Math.abs(guessed-actual); const err=diff/actual; 
+  const success = err<0.10; const pct=Math.floor(Math.random()*6)+5; const delta=Math.floor(actual*(pct/100)); 
+  hideModal('guessModal'); 
+  
+  if(success){ 
+    remaining = Math.max(actual-delta, MIN_SECONDS); 
+    // V2.5.1 修正 C1：Toast 提示中不能出现新的剩余时间
+    showToast(`✅ 猜对！减少 ${pct}%`, `节省 ${fmt(delta)}，时间已更新`, false); 
+    // V2.5.1 修正 C1：Log 中也不能出现新的剩余时间
+    log(`🕹️ 猜测成功（误差 ${(err*100).toFixed(1)}%），减少 ${pct}%（-${fmt(delta)}），时间已变化`); 
+  } else { 
+    remaining = Math.min(actual+delta, MAX_SECONDS); 
+    // V2.5.1 修正 C1：Toast 提示中不能出现新的剩余时间
+    showToast(`❌ 猜错！增加 ${pct}%`, `惩罚 ${fmt(delta)}，时间已更新`, true); 
+    // V2.5.1 修正 C1：Log 中也不能出现新的剩余时间
+    log(`🕹️ 猜测失败（误差 ${(err*100).toFixed(1)}%），增加 ${pct}%（+${fmt(delta)}），时间已变化`); 
+  } 
+  targetEnd=Date.now()+remaining*1000; 
+  
+  // V2.5: 统一使用 4 字节上锁命令 (更新计时，重新发送锁定信号)
+  const {dataView} = buildCommand(true); 
+  BleManager.sendData(dataView, `猜时间更新定时 (4 字节)`); 
+  
+  updateUI(); 
+});
+
+
+/* ---------- clear storage button ---------- */
+$('clearStorageBtn').addEventListener('click', ()=>{
+  if (confirm('确定清除本地存储并重置界面？将刷新页面。')){
+    BleManager.disconnect(); 
+    clearSavedState();
+    log('🧹 本地存储已清除，正在刷新页面以重置状态');
+    setTimeout(()=>location.reload(), 200);
+  }
+});
+
+/* ---------- init ---------- */
+renderCalendar(); renderSelectors(); renderDateHM(); 
+const had = loadState();
+if (!had) {
+  updateUI();
+  log('🟢 v2.5.2 Web BLE 已就绪 — 请点击 "连接设备" 按钮开始。');
+} else {
+  updateUI(); 
+  log('🔄 恢复本地存储状态。请重新点击 "连接设备" 按钮连接 BLE 设备。');
+}
+</script>
+</body>
+</html>
