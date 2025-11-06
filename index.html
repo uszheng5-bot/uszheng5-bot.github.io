@@ -89,8 +89,8 @@ h1{margin:0;color:var(--accent);font-size:18px}
 
 .muted{color:var(--muted);font-size:13px}
 
-/* clear storage small */
-.clear-storage{background:transparent;border:1px dashed rgba(255,255,255,0.06);color:var(--muted);padding:6px 8px;border-radius:8px;font-size:13px;cursor:pointer}
+/* clear storage small (REMOVED: The HTML element is removed as requested) */
+/* .clear-storage{background:transparent;border:1px dashed rgba(255,255,255,0.06);color:var(--muted);padding:6px 8px;border-radius:8px;font-size:13px;cursor:pointer} */
 </style>
 </head>
 <body>
@@ -1092,18 +1092,14 @@ $('doGuess').addEventListener('click', ()=>{
 });
 
 
-/* ---------- clear storage button ---------- */
-$('clearStorageBtn').addEventListener('click', ()=>{
-  if (confirm('确定清除本地存储并重置界面？将刷新页面。')){
-    BleManager.disconnect(); 
-    clearSavedState();
-    log('🧹 本地存储已清除，正在刷新页面以重置状态');
-    setTimeout(()=>location.reload(), 200);
-  }
-});
+/* ---------- clear storage button (REMOVED) ---------- */
+// 这一部分代码已经被删除，以避免找不到元素而导致的脚本中断。
+
 
 /* ---------- init ---------- */
-renderCalendar(); renderSelectors(); renderDateHM(); 
+renderCalendar(); 
+renderSelectors(); 
+renderDateHM(); 
 const had = loadState();
 if (!had) {
   updateUI();
